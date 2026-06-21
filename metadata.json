@@ -1,0 +1,6 @@
+{
+  "name": "Resonance",
+  "description": "An immersive, premium high-resolution local audio player with advanced dark theme palettes, multi-ambient animated colorways, responsive spatial equalizer, and smooth local file-system scanning.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

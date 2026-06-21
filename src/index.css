@@ -1,0 +1,211 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+@variant dark (.dark &);
+@variant light (.light &);
+
+@layer base {
+  body {
+    @apply antialiased select-none overflow-hidden m-0 p-0 text-neutral-200 transition-colors duration-300;
+  }
+}
+
+/* Custom scrollbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.01);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Glass panel glow */
+.acrylic-card {
+  background: rgba(12, 12, 14, 0.45);
+  backdrop-filter: blur(30px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.acrylic-card-light {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(30px) saturate(160%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.06);
+}
+
+.glass-nav-item-active {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-nav-item-active-light {
+  background: rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+}
+
+/* Frosted glass utilities */
+.frosted-main-bg {
+  background: radial-gradient(at top right, rgba(99, 102, 241, 0.1), transparent 50%),
+              radial-gradient(at bottom left, rgba(168, 85, 247, 0.09), transparent 50%),
+              #09090b;
+}
+
+.frosted-main-bg-light {
+  background: radial-gradient(at top right, rgba(99, 102, 241, 0.06), transparent 50%),
+              radial-gradient(at bottom left, rgba(168, 85, 247, 0.05), transparent 50%),
+              #f4f4f5; /* zinc-100 fallback */
+  background-color: #f4f4f5;
+}
+
+/* Shimmer animations */
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(1.05);
+  }
+}
+
+.ambient-pulse {
+  animation: pulseGlow 12s infinite ease-in-out;
+}
+
+/* Fast fading animation classes */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUpFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up-fade-in {
+  animation: slideUpFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Premium Animated Gradet Themes */
+@keyframes nebulaFlow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.bg-nebula {
+  background: linear-gradient(135deg, #090014, #120424, #220633, #0b011c, #020005);
+  background-size: 300% 300%;
+  animation: nebulaFlow 18s ease infinite;
+}
+
+.bg-sunset {
+  background: linear-gradient(135deg, #1f0511, #2b0417, #3b091f, #1b0114, #050004);
+  background-size: 300% 300%;
+  animation: nebulaFlow 20s ease infinite;
+}
+
+.bg-aurora {
+  background: linear-gradient(135deg, #00120f, #011b15, #043026, #011113, #000203);
+  background-size: 300% 300%;
+  animation: nebulaFlow 24s ease infinite;
+}
+
+.bg-matrix {
+  background: linear-gradient(135deg, #010a03, #021406, #04240b, #010602, #000000);
+  background-size: 300% 300%;
+  animation: nebulaFlow 15s ease infinite;
+}
+
+.bg-cyberpunk {
+  background: linear-gradient(135deg, #090014, #18002b, #2b002b, #100020, #000);
+  background-size: 300% 300%;
+  animation: nebulaFlow 16s ease infinite;
+}
+
+.bg-nordic {
+  background: linear-gradient(135deg, #010912, #031424, #0a1f33, #020c18, #000305);
+  background-size: 300% 300%;
+  animation: nebulaFlow 20s ease infinite;
+}
+
+.bg-sakura {
+  background: linear-gradient(135deg, #100108, #1c0210, #2c041c, #14010a, #040001);
+  background-size: 300% 300%;
+  animation: nebulaFlow 22s ease infinite;
+}
+
+.bg-crimson {
+  background: linear-gradient(135deg, #140101, #200202, #300303, #160101, #040000);
+  background-size: 300% 300%;
+  animation: nebulaFlow 14s ease infinite;
+}
+
+@keyframes floatBubble {
+  0% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-15px) scale(1.05); }
+  100% { transform: translateY(0px) scale(1); }
+}
+
+.ambient-float {
+  animation: floatBubble 8s ease-in-out infinite;
+}
+
+@keyframes vinylSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-vinyl-spin {
+  animation: vinylSpin 15s linear infinite;
+}
+
+@keyframes slowGlowPulse {
+  0% { transform: scale(1); opacity: 0.15; }
+  50% { transform: scale(1.1); opacity: 0.35; }
+  100% { transform: scale(1); opacity: 0.15; }
+}
+
+.animate-slow-glow-pulse {
+  animation: slowGlowPulse 6s ease-in-out infinite;
+}
+
+
