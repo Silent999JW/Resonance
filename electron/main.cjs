@@ -67,23 +67,39 @@ if (!app.requestSingleInstanceLock()) {
         const rawUrl = request.url;
         let fileRawPath = '';
 
-        if (rawUrl.includes('?path=')) {
+        if (rawUrl.startsWith('media://local-file/')) {
+          fileRawPath = decodeURIComponent(rawUrl.slice('media://local-file/'.length));
+        } else if (rawUrl.includes('?path=')) {
           const parsed = new URL(rawUrl);
           fileRawPath = parsed.searchParams.get('path') || '';
         } else {
           fileRawPath = decodeURIComponent(rawUrl.slice('media://'.length));
+        }
 
-          // Clean up Windows and Linux absolute paths from the custom URL structure
-          if (fileRawPath.startsWith('///')) {
-            fileRawPath = fileRawPath.slice(3);
-          } else if (fileRawPath.startsWith('//')) {
-            fileRawPath = fileRawPath.slice(2);
-          } else if (fileRawPath.startsWith('/')) {
-            // On Windows, /C:/music.mp3 should become C:/music.mp3
-            if (fileRawPath[2] === ':' || fileRawPath[1] === ':') {
-              fileRawPath = fileRawPath.slice(1);
-            }
+        // Clean up trailing slash if any standard URL parser added it
+        if (fileRawPath.endsWith('/')) {
+          fileRawPath = fileRawPath.slice(0, -1);
+        }
+
+        // Clean up Windows and Linux absolute paths from the custom URL structure
+        if (fileRawPath.startsWith('///')) {
+          fileRawPath = fileRawPath.slice(3);
+        } else if (fileRawPath.startsWith('//')) {
+          fileRawPath = fileRawPath.slice(2);
+        } else if (fileRawPath.startsWith('/')) {
+          // On Windows, /C:/music.mp3 should become C:/music.mp3
+          if (fileRawPath[2] === ':' || fileRawPath[1] === ':') {
+            fileRawPath = fileRawPath.slice(1);
           }
+        }
+
+        // If it starts with some other slash structure or has backslashes, clean it
+        fileRawPath = fileRawPath.replace(/\\/g, '/');
+
+        // Check if file exists
+        if (!fs.existsSync(fileRawPath)) {
+          console.error(`Media protocol file not found physically: "${fileRawPath}"`);
+          return new Response('File not found: ' + fileRawPath, { status: 404 });
         }
 
         const fileUrl = pathToFileURL(fileRawPath).toString();
