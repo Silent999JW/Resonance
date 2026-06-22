@@ -401,6 +401,7 @@ export default function App() {
             playCount: 0,
             addedAt: Date.now(),
             fileHandle,
+            rawFile: file,
           };
 
           await musicDb.saveTrack(finalTrack);
@@ -439,12 +440,15 @@ export default function App() {
 
         const metadata = await parseAudioMetadata(file);
         const trackId = `track_${file.name}_${file.size}_${file.lastModified}`;
+        const filePath = (file as any).path;
+
         const finalTrack: Track = {
           id: trackId,
           ...metadata,
           playCount: 0,
           addedAt: Date.now(),
-          rawFile: file,
+          rawFile: window.electron ? undefined : file,
+          filePath: window.electron ? filePath : undefined,
         };
 
         await musicDb.saveTrack(finalTrack);

@@ -77,10 +77,9 @@ class MusicDB {
       
       // Clear or overwrite
       tracks.forEach(track => {
-        // Strip temporary fields before saving
+        // Strip temporary fields before saving but keep rawFile (audio data)
         const savedTrack = { ...track };
         delete savedTrack.artworkUrl;
-        delete savedTrack.rawFile;
         store.put(savedTrack);
       });
 
@@ -96,7 +95,6 @@ class MusicDB {
       const store = transaction.objectStore('tracks');
       const savedTrack = { ...track };
       delete savedTrack.artworkUrl;
-      delete savedTrack.rawFile;
       const request = store.put(savedTrack);
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
