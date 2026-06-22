@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Play,
   Heart,
@@ -9,7 +9,10 @@ import {
   Clock,
   Music,
   FolderLock,
-  ListRestart
+  ListRestart,
+  FolderOpen,
+  ChevronRight,
+  ListPlus
 } from 'lucide-react';
 import { Track, Playlist } from '../types';
 
@@ -54,6 +57,38 @@ export default function TrackList({
 
   // Track context option popovers
   const [activeMenuTrackId, setActiveMenuTrackId] = useState<string | null>(null);
+
+  // Right-click context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    track: Track;
+  } | null>(null);
+
+  // Handle right click to open context menu with dynamic viewport safety
+  const handleContextMenuOpen = (e: React.MouseEvent, track: Track) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const menuWidth = 208; // approx w-52
+    const menuHeight = 250; // approx height
+
+    let posX = e.clientX;
+    let posY = e.clientY;
+
+    if (posX + menuWidth > window.innerWidth) {
+      posX = window.innerWidth - menuWidth - 8;
+    }
+    if (posY + menuHeight > window.innerHeight) {
+      posY = window.innerHeight - menuHeight - 8;
+    }
+
+    posX = Math.max(8, posX);
+    posY = Math.max(8, posY);
+
+    setContextMenu({ x: posX, y: posY, track });
+    setActiveMenuTrackId(null); // Close vertical ellipsis menus if open
+  };
 
   // Lazy Pagination to handle up to 100,000+ files gracefully
   const paginatedTracks = useMemo(() => {
@@ -182,6 +217,7 @@ export default function TrackList({
             key={track.id}
             onMouseLeave={() => setActiveMenuTrackId(null)}
             onClick={() => onPlayTrack(track)}
+            onContextMenu={(e) => handleContextMenuOpen(e, track)}
             className="grid grid-cols-12 gap-4 items-center px-4 py-2.5 dark:bg-neutral-900/55 light:bg-zinc-950/8 dark:hover:bg-neutral-900/80 light:hover:bg-zinc-950/20 border dark:border-white/[0.08] light:border-black/[0.08] dark:hover:border-white/20 light:hover:border-black/20 rounded-xl transition duration-200 group cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.1)]"
           >
             {/* Number / Play Indicator */}
@@ -347,6 +383,130 @@ export default function TrackList({
             <span>Autoloading more tracks... ({tracks.length - paginatedTracks.length} remaining)</span>
           </div>
         </div>
+      )}
+
+      {/* Floating Custom Right-click Context Menu */}
+      {contextMenu && (
+        <>
+          {/* Backdrop to close menu on outside clicks */}
+          <div
+            className="fixed inset-0 z-40 bg-transparent cursor-default"
+            onClick={() => setContextMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu(null);
+            }}
+          />
+
+          <div
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            className="fixed z-50 dark:bg-neutral-950/95 light:bg-white/95 border dark:border-white/10 light:border-black/10 p-1.5 rounded-xl shadow-2xl w-52 text-left space-y-0.5 animate-fade-in backdrop-blur-md select-none pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <div className="px-3 py-1.5 border-b dark:border-white/5 light:border-black/5 mb-1 truncate">
+              <span className="block text-[10.5px] font-bold dark:text-neutral-200 light:text-zinc-800 truncate">
+                {contextMenu.track.title}
+              </span>
+              <span className="block text-[9px] dark:text-neutral-500 light:text-zinc-500 truncate">
+                {contextMenu.track.artist}
+              </span>
+            </div>
+
+            <button
+              onClick={() => {
+                onPlayTrack(contextMenu.track);
+                setContextMenu(null);
+              }}
+              className="w-full text-left font-semibold text-[11px] dark:text-neutral-200 light:text-zinc-800 dark:hover:text-white light:hover:text-zinc-950 dark:hover:bg-white/5 light:hover:bg-black/5 py-1.5 px-3 rounded-lg transition flex items-center space-x-2"
+            >
+              <Play size={12} className="fill-current" />
+              <span>Play Now</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onAddToQueue(contextMenu.track);
+                setContextMenu(null);
+              }}
+              className="w-full text-left font-semibold text-[11px] dark:text-neutral-200 light:text-zinc-800 dark:hover:text-white light:hover:text-zinc-950 dark:hover:bg-white/5 light:hover:bg-black/5 py-1.5 px-3 rounded-lg transition flex items-center space-x-2"
+            >
+              <ListPlus size={12} />
+              <span>Add to Queue</span>
+            </button>
+
+            {/* Playlists option with Fly-out Submenu */}
+            <div className="relative group/playlist">
+              <button className="w-full text-left font-semibold text-[11px] dark:text-neutral-200 light:text-zinc-800 dark:hover:text-white light:hover:text-zinc-950 dark:hover:bg-white/5 light:hover:bg-black/5 py-1.5 px-3 rounded-lg transition flex items-center justify-between">
+                <span className="flex items-center space-x-2">
+                  <Plus size={12} />
+                  <span>Add to Playlist</span>
+                </span>
+                <ChevronRight size={10} className="dark:text-neutral-500 light:text-zinc-500" />
+              </button>
+              {playlists.length > 0 ? (
+                <div
+                  className={`absolute top-0 hidden group-hover/playlist:block dark:bg-neutral-950/95 light:bg-white/95 border dark:border-white/10 light:border-black/10 p-1.5 rounded-xl shadow-2xl w-44 hover:block max-h-48 overflow-y-auto z-50 ${
+                    contextMenu.x + 208 + 176 > window.innerWidth
+                      ? 'right-full mr-1'
+                      : 'left-full ml-1'
+                  }`}
+                >
+                  {playlists.map((playlist) => (
+                    <button
+                      key={playlist.id}
+                      onClick={() => {
+                        onAddToPlaylist(playlist.id, contextMenu.track.id);
+                        setContextMenu(null);
+                      }}
+                      className="w-full text-left text-[10.5px] truncate dark:text-neutral-300 light:text-zinc-700 dark:hover:text-white light:hover:text-zinc-950 dark:hover:bg-white/5 light:hover:bg-black/5 py-1 px-2.5 rounded-md transition"
+                    >
+                      + {playlist.name}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div
+                  className={`absolute top-0 hidden group-hover/playlist:block dark:bg-neutral-950/95 light:bg-white/95 border dark:border-white/10 light:border-black/10 p-2 rounded-xl shadow-2xl w-40 text-center hover:block z-50 ${
+                    contextMenu.x + 208 + 160 > window.innerWidth
+                      ? 'right-full mr-1'
+                      : 'left-full ml-1'
+                  }`}
+                >
+                  <span className="block text-[9.5px] dark:text-neutral-500 light:text-zinc-500 italic">
+                    No custom playlists
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {onOpenFileDirectory && (
+              <button
+                onClick={() => {
+                  onOpenFileDirectory(contextMenu.track);
+                  setContextMenu(null);
+                }}
+                className="w-full text-left font-semibold text-[11px] dark:text-neutral-200 light:text-zinc-800 dark:hover:text-white light:hover:text-zinc-950 dark:hover:bg-white/5 light:hover:bg-black/5 py-1.5 px-3 rounded-lg transition flex items-center space-x-2 border-t dark:border-white/5 light:border-black/5 mt-1 pt-1.5"
+              >
+                <FolderOpen size={12} />
+                <span>Show in Explorer</span>
+              </button>
+            )}
+
+            {onDeleteTrack && (
+              <button
+                onClick={() => {
+                  onDeleteTrack(contextMenu.track.id);
+                  setContextMenu(null);
+                }}
+                className="w-full text-left font-semibold text-[11px] text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 py-1.5 px-3 rounded-lg transition flex items-center space-x-2 border-t dark:border-white/5 light:border-black/5 mt-1 pt-1.5"
+              >
+                <Trash2 size={12} />
+                <span>Delete Track</span>
+              </button>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

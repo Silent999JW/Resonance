@@ -18,7 +18,7 @@ function getMimeType(filePath) {
 
 // Register media:// custom protocol scheme
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'media', privileges: { bypassCSP: true, stream: true, standard: true, corsEnabled: true } }
+  { scheme: 'media', privileges: { bypassCSP: true, stream: true, standard: true, corsEnabled: true, supportFetchAPI: true } }
 ]);
 
 let mainWindow = null;
@@ -81,6 +81,19 @@ if (!app.requestSingleInstanceLock()) {
         const parsedUrl = new URL(rawUrl);
         let fileRawPath = '';
 
+        // Handle OPTIONS requests (CORS preflight) safely
+        if (request.method === 'OPTIONS') {
+          return new Response('', {
+            status: 200,
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+              'Access-Control-Allow-Headers': '*',
+              'Access-Control-Max-Age': '86400'
+            }
+          });
+        }
+
         if (parsedUrl.searchParams.has('path')) {
           fileRawPath = parsedUrl.searchParams.get('path') || '';
         } else if (rawUrl.startsWith('media://local-file/')) {
@@ -111,10 +124,19 @@ if (!app.requestSingleInstanceLock()) {
           }
         }
 
+        const corsHeaders = {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+          'Access-Control-Allow-Headers': '*',
+        };
+
         // Check if file exists
         if (!fs.existsSync(fileRawPath)) {
           console.error(`Media protocol file not found physically: "${fileRawPath}"`);
-          return new Response('File not found: ' + fileRawPath, { status: 404 });
+          return new Response('File not found: ' + fileRawPath, {
+            status: 404,
+            headers: corsHeaders
+          });
         }
 
         const stats = fs.statSync(fileRawPath);
@@ -127,6 +149,7 @@ if (!app.requestSingleInstanceLock()) {
           return new Response(webStream, {
             status: 200,
             headers: {
+              ...corsHeaders,
               'Content-Type': mimeType,
               'Content-Length': stats.size.toString(),
               'Accept-Ranges': 'bytes'
@@ -143,6 +166,7 @@ if (!app.requestSingleInstanceLock()) {
           return new Response('', {
             status: 416,
             headers: {
+              ...corsHeaders,
               'Content-Range': `bytes */${stats.size}`
             }
           });
@@ -155,6 +179,7 @@ if (!app.requestSingleInstanceLock()) {
         return new Response(webStream, {
           status: 206,
           headers: {
+            ...corsHeaders,
             'Content-Range': `bytes ${start}-${end}/${stats.size}`,
             'Accept-Ranges': 'bytes',
             'Content-Length': chunksize.toString(),
@@ -163,7 +188,12 @@ if (!app.requestSingleInstanceLock()) {
         });
       } catch (err) {
         console.error('Failed to handle media request:', err);
-        return new Response('File access error', { status: 500 });
+        return new Response('File access error', {
+          status: 500,
+          headers: {
+            'Access-Control-Allow-Origin': '*'
+          }
+        });
       }
     });
 

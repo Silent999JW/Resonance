@@ -61,6 +61,8 @@ class AudioEngine {
     // Setup standard media playback attributes
     this.playerA.preload = 'auto';
     this.playerB.preload = 'auto';
+    this.playerA.crossOrigin = 'anonymous';
+    this.playerB.crossOrigin = 'anonymous';
 
     this.setupAudioListeners(this.playerA, 'A');
     this.setupAudioListeners(this.playerB, 'B');

@@ -774,21 +774,78 @@ export default function App() {
   };
 
   // --- CORE PLAYBACK DISPATCH HANDLERS ---
-  const handlePlaySongDirect = (track: Track, tracksScope: Track[]) => {
+  const handlePlaySongDirect = async (track: Track, tracksScope: Track[]) => {
+    let resolvedTrack = track;
+
+    // Self-healing: if in the browser and file source is missing or stale, attempt lookup in authorized folders
+    if (!window.electron && !track.rawFile) {
+      let healingRequired = !track.fileHandle;
+      if (track.fileHandle) {
+        try {
+          await track.fileHandle.getFile();
+        } catch (e) {
+          healingRequired = true;
+        }
+      }
+
+      if (healingRequired && folders.length > 0) {
+        let healedTrack: Track | null = null;
+        for (const f of folders) {
+          try {
+            const hasPermission = await f.handle.queryPermission({ mode: 'read' }) === 'granted';
+            if (hasPermission) {
+              // Recursive finder helper
+              const findFileInDirectory = async (dirHandle: FileSystemDirectoryHandle, targetName: string): Promise<FileSystemFileHandle | null> => {
+                for await (const entry of (dirHandle as any).values()) {
+                  if (entry.kind === 'file' && entry.name === targetName) {
+                    return entry;
+                  } else if (entry.kind === 'directory') {
+                    const result = await findFileInDirectory(entry, targetName);
+                    if (result) return result;
+                  }
+                }
+                return null;
+              };
+
+              const fileHandle = await findFileInDirectory(f.handle, track.fileName);
+              if (fileHandle) {
+                const file = await fileHandle.getFile();
+                healedTrack = {
+                  ...track,
+                  fileHandle,
+                  rawFile: file,
+                };
+                break;
+              }
+            }
+          } catch (e) {
+            console.warn('Silent folder file lookup healing failed on directory entry:', e);
+          }
+        }
+
+        if (healedTrack) {
+          resolvedTrack = healedTrack;
+          // Optimistically update memory states & DB to match recovered source
+          setTracks((prev) => prev.map((t) => t.id === track.id ? healedTrack! : t));
+          await musicDb.saveTrack(healedTrack);
+        }
+      }
+    }
+
     // 1. Compile Queue based on currently visible/active tab items
     let targetQueue = [...tracksScope];
     
     // Auto queue should contain a maximum of 50 upcoming songs at once
     if (isShuffle) {
       // Shuffled elements preserving first playing
-      const items = targetQueue.filter((t) => t.id !== track.id);
+      const items = targetQueue.filter((t) => t.id !== resolvedTrack.id);
       for (let i = items.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [items[i], items[j]] = [items[j], items[i]];
       }
-      targetQueue = [track, ...items].slice(0, 50);
+      targetQueue = [resolvedTrack, ...items].slice(0, 50);
     } else {
-      const idx = targetQueue.findIndex((t) => t.id === track.id);
+      const idx = targetQueue.findIndex((t) => t.id === resolvedTrack.id);
       if (idx !== -1) {
         // Start from clicked track, slice up to 50 entries to keep queue instant
         targetQueue = targetQueue.slice(idx, idx + 50);
@@ -797,9 +854,9 @@ export default function App() {
 
     setQueue(targetQueue);
     setActiveQueueIndex(0);
-    setCurrentTrack(track);
+    setCurrentTrack(resolvedTrack);
 
-    audioEngine.playTrack(track).catch((err) => {
+    audioEngine.playTrack(resolvedTrack).catch((err) => {
       alert(err.message || 'Error occurred starting audio execution.');
     });
   };
