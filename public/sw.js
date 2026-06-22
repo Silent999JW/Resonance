@@ -30,8 +30,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Direct pass-through for Web Audio, Local files, and API endpoints
+  // Direct pass-through for Web Audio, Local blobs, data-URIs, and API endpoints
   if (
+    event.request.url.startsWith('blob:') ||
+    event.request.url.startsWith('data:') ||
     event.request.url.startsWith('media://') ||
     event.request.url.includes('/api/') ||
     event.request.url.startsWith('chrome-extension:')
