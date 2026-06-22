@@ -76,6 +76,7 @@ export default function App() {
 
   // Background utilities state
   const [isScanning, setIsScanning] = useState<boolean>(false);
+  const [scanProgress, setScanProgress] = useState<{ current: number; total: number; activeFileName: string } | null>(null);
   const [zipProgress, setZipProgress] = useState<number | null>(null);
   const [zipActiveName, setZipActiveName] = useState<string>('');
   const [isShuffle, setIsShuffle] = useState<boolean>(false);
@@ -285,6 +286,71 @@ export default function App() {
 
   // --- RECURSIVE DIRECTORY INDEXER ---
   const handleImportDirectory = async () => {
+    if (window.electron) {
+      try {
+        setIsScanning(true);
+        const selectedDir = await window.electron.chooseDirectory();
+        if (!selectedDir) {
+          setIsScanning(false);
+          return;
+        }
+
+        const folderName = selectedDir.split(/\\|\//).pop() || selectedDir;
+        if (!folders.some((f) => f.id === selectedDir)) {
+          const mockHandle = { name: folderName } as any;
+          await musicDb.saveFolder(selectedDir, mockHandle, selectedDir);
+          setFolders((prev) => [...prev, { id: selectedDir, name: folderName, handle: mockHandle }]);
+        }
+
+        const nativeFiles = await window.electron.scanDirectory(selectedDir);
+        
+        let currentCount = 0;
+        const totalCount = nativeFiles.length;
+        setScanProgress({ current: 0, total: totalCount, activeFileName: '' });
+
+        for (const nativeFile of nativeFiles) {
+          try {
+            currentCount++;
+            setScanProgress({ current: currentCount, total: totalCount, activeFileName: nativeFile.name });
+
+            const fileData = await window.electron.getFileMetadataChunk(nativeFile.path);
+            const blob = new Blob([fileData.buffer], { type: 'audio/mpeg' });
+            const mockFile = new File([blob], fileData.name, { type: 'audio/mpeg' });
+
+            const metadata = await parseAudioMetadata(mockFile);
+
+            const trackId = `track_${fileData.name}_${fileData.size}_${fileData.mtime}`;
+            const finalTrack: Track = {
+              id: trackId,
+              ...metadata,
+              duration: metadata.duration || 0,
+              playCount: 0,
+              addedAt: Date.now(),
+              filePath: nativeFile.path,
+              fileName: fileData.name,
+              fileSize: fileData.size
+            };
+
+            await musicDb.saveTrack(finalTrack);
+            setTracks((prev) => {
+              if (prev.some((t) => t.id === finalTrack.id)) return prev;
+              return [...prev, finalTrack];
+            });
+
+          } catch (e) {
+            console.warn(`Could not read metadata for path ${nativeFile.path}:`, e);
+          }
+        }
+
+      } catch (err) {
+        console.error('Electron native indexer failed:', err);
+      } finally {
+        setIsScanning(false);
+        setScanProgress(null);
+      }
+      return;
+    }
+
     if (!('showDirectoryPicker' in window)) {
       alert('Your browser does not support the Native Directory Access API. Please use Chromium browsers (Chrome, Edge) to recursively load full directory hierarchies. Otherwise, drop songs directly into the dashboard.');
       return;
@@ -315,10 +381,15 @@ export default function App() {
 
       await scan(directoryHandle);
 
-      // Parse metadata block by block to avoid CPU choke
-      const freshlyParsedTracks: Track[] = [];
+      let currentCount = 0;
+      const totalCount = fileHandles.length;
+      setScanProgress({ current: 0, total: totalCount, activeFileName: '' });
+
       for (const fileHandle of fileHandles) {
         try {
+          currentCount++;
+          setScanProgress({ current: currentCount, total: totalCount, activeFileName: fileHandle.name });
+
           const file = await fileHandle.getFile();
           // Fast tag reader
           const metadata = await parseAudioMetadata(file, fileHandle);
@@ -331,33 +402,31 @@ export default function App() {
             addedAt: Date.now(),
             fileHandle,
           };
-          freshlyParsedTracks.push(finalTrack);
+
+          await musicDb.saveTrack(finalTrack);
+          setTracks((prev) => {
+            if (prev.some((t) => t.id === finalTrack.id)) return prev;
+            return [...prev, finalTrack];
+          });
+
         } catch (e) {
           console.warn(`Could not read metadata for file ${fileHandle.name}:`, e);
         }
       }
 
-      // Save tracks to state and db
-      const mergedTracks = [...tracks];
-      freshlyParsedTracks.forEach((newTrack) => {
-        if (!mergedTracks.some((t) => t.id === newTrack.id)) {
-          mergedTracks.push(newTrack);
-        }
-      });
-
-      await musicDb.saveTracks(mergedTracks);
-      setTracks(mergedTracks);
-
     } catch (err) {
       console.error('Directory picker was aborted or failed:', err);
     } finally {
       setIsScanning(false);
+      setScanProgress(null);
     }
   };
 
   const handleManualFilesFallback = async (files: FileList) => {
     setIsScanning(true);
-    const parsedTracks: Track[] = [];
+    let currentCount = 0;
+    const totalCount = files.length;
+    setScanProgress({ current: 0, total: totalCount, activeFileName: '' });
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -365,6 +434,9 @@ export default function App() {
       if (!['mp3', 'flac', 'wav', 'ogg', 'aac', 'm4a'].includes(ext || '')) continue;
 
       try {
+        currentCount++;
+        setScanProgress({ current: currentCount, total: totalCount, activeFileName: file.name });
+
         const metadata = await parseAudioMetadata(file);
         const trackId = `track_${file.name}_${file.size}_${file.lastModified}`;
         const finalTrack: Track = {
@@ -374,22 +446,19 @@ export default function App() {
           addedAt: Date.now(),
           rawFile: file,
         };
-        parsedTracks.push(finalTrack);
+
+        await musicDb.saveTrack(finalTrack);
+        setTracks((prev) => {
+          if (prev.some((t) => t.id === finalTrack.id)) return prev;
+          return [...prev, finalTrack];
+        });
+
       } catch (e) {
         console.warn('Metadata parsing fail on dropped file:', e);
       }
     }
-
-    const mergedTracks = [...tracks];
-    parsedTracks.forEach((newTrack) => {
-      if (!mergedTracks.some((t) => t.id === newTrack.id)) {
-        mergedTracks.push(newTrack);
-      }
-    });
-
-    await musicDb.saveTracks(mergedTracks);
-    setTracks(mergedTracks);
     setIsScanning(false);
+    setScanProgress(null);
   };
 
   // --- SETTINGS DISPATCH UPDATER ---
@@ -455,6 +524,11 @@ export default function App() {
 
   // --- DIRECTORY SECURITY RE-AUTHORIZATION TRIGGER ---
   const handleAuthorizeFolders = async () => {
+    if (window.electron) {
+      alert('Desktop Mode: Connected directories are locally verified and permanently authorized.');
+      return;
+    }
+
     let success = 0;
     let failed = 0;
     for (const folder of folders) {
@@ -490,6 +564,13 @@ export default function App() {
 
   // --- OPEN FILE DIRECTORY OVERVIEW ---
   const handleOpenFileDirectory = async (track: Track) => {
+    if (window.electron && track.filePath) {
+      const shown = await window.electron.showItemInFolder(track.filePath);
+      if (shown) {
+        return;
+      }
+    }
+
     setLocatingTrack(track);
     setLocatingFolderFiles([]);
     setIsLocatingScanActive(true);
@@ -544,37 +625,40 @@ export default function App() {
 
     try {
       // Check if we need permission on folder handles first to prevent empty ZIPs!
-      const unauthorizedFolders = [];
-      for (const f of folders) {
-        if (f.handle) {
-          const status = await f.handle.queryPermission({ mode: 'read' });
-          if (status !== 'granted') {
-            unauthorizedFolders.push(f);
-          }
-        }
-      }
-
-      if (unauthorizedFolders.length > 0) {
-        const approved = confirm(`Security requirement: Your connected directory "${unauthorizedFolders[0].name}" needs browser authorization before the local files can be packed. Grant directory access?`);
-        if (approved) {
-          let success = false;
-          for (const f of unauthorizedFolders) {
-            try {
-              const res = await f.handle.requestPermission({ mode: 'read' });
-              if (res === 'granted') {
-                success = true;
-              }
-            } catch (err) {
-              console.error('Directory authorized fail:', err);
+      // Skip this safety if we are running in Electron and everything has native filepaths
+      if (!window.electron) {
+        const unauthorizedFolders = [];
+        for (const f of folders) {
+          if (f.handle) {
+            const status = await f.handle.queryPermission({ mode: 'read' });
+            if (status !== 'granted') {
+              unauthorizedFolders.push(f);
             }
           }
-          if (!success) {
-            alert('Authorization denied. ZIP compilation cancelled.');
+        }
+
+        if (unauthorizedFolders.length > 0) {
+          const approved = confirm(`Security requirement: Your connected directory "${unauthorizedFolders[0].name}" needs browser authorization before the local files can be packed. Grant directory access?`);
+          if (approved) {
+            let success = false;
+            for (const f of unauthorizedFolders) {
+              try {
+                const res = await f.handle.requestPermission({ mode: 'read' });
+                if (res === 'granted') {
+                  success = true;
+                }
+              } catch (err) {
+                console.error('Directory authorized fail:', err);
+              }
+            }
+            if (!success) {
+              alert('Authorization denied. ZIP compilation cancelled.');
+              return;
+            }
+          } else {
+            alert('ZIP export cancelled (permission denied).');
             return;
           }
-        } else {
-          alert('ZIP export cancelled (permission denied).');
-          return;
         }
       }
 
@@ -589,6 +673,14 @@ export default function App() {
 
         if (track.rawFile) {
           file = track.rawFile;
+        } else if (window.electron && track.filePath) {
+          try {
+            const arrayBuffer = await window.electron.readFileAsArrayBuffer(track.filePath);
+            file = new File([arrayBuffer], track.fileName);
+          } catch (e) {
+            console.error('Permission or read failed for file:', track.fileName);
+            continue;
+          }
         } else if (track.fileHandle) {
           try {
             // Restore permission on fileHandle if prompt is required
@@ -623,13 +715,22 @@ export default function App() {
         setZipProgress(val > 100 ? 100 : val);
       });
 
-      // Browser trigger standard download link
-      const url = URL.createObjectURL(content);
-      const tempLink = document.createElement('a');
-      tempLink.href = url;
-      tempLink.download = `${name.trim().toLowerCase().replace(/\s+/g, '_')}_songs.zip`;
-      tempLink.click();
-      URL.revokeObjectURL(url);
+      // Browser trigger standard download link / Native Save Dialog
+      if (window.electron && window.electron.saveZipDialog) {
+        const defaultName = `${name.trim().toLowerCase().replace(/\s+/g, '_')}_songs.zip`;
+        const savePath = await window.electron.saveZipDialog(defaultName);
+        if (savePath) {
+          const arrayBuffer = await content.arrayBuffer();
+          await window.electron.writeFile(savePath, arrayBuffer);
+        }
+      } else {
+        const url = URL.createObjectURL(content);
+        const tempLink = document.createElement('a');
+        tempLink.href = url;
+        tempLink.download = `${name.trim().toLowerCase().replace(/\s+/g, '_')}_songs.zip`;
+        tempLink.click();
+        URL.revokeObjectURL(url);
+      }
 
     } catch (e) {
       console.error('JSZip package packing error:', e);
@@ -1707,6 +1808,41 @@ export default function App() {
                 Close Explorer
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Index/Scan progress status bar visual indicator */}
+      {scanProgress !== null && (
+        <div className="fixed inset-0 bg-neutral-950/85 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in" id="scan-progress-modal">
+          <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl w-full max-w-sm space-y-4 shadow-2xl">
+            <div className="text-center">
+              <FolderSync className="mx-auto text-emerald-400 mb-2 animate-spin" size={32} />
+              <h4 className="font-bold text-white uppercase text-xs tracking-wider font-mono">Indexing Music Folder</h4>
+              <p className="text-[11px] text-neutral-400 mt-1 truncate">
+                Processing offline files...
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="w-full h-1.5 bg-neutral-950 rounded-full overflow-hidden">
+                <div 
+                  style={{ width: `${scanProgress.total > 0 ? (scanProgress.current / scanProgress.total) * 100 : 0}%` }} 
+                  className={`h-full class-transition rounded-full ${customAccentBg}`} 
+                />
+              </div>
+              <div className="flex justify-between items-center text-[10px] text-neutral-500 font-mono">
+                <span>Progress ({scanProgress.current} / {scanProgress.total})</span>
+                <span>{scanProgress.total > 0 ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0}%</span>
+              </div>
+            </div>
+
+            {scanProgress.activeFileName && (
+              <div className="py-2.5 bg-white/5 rounded-xl px-4 flex items-center space-x-2 text-[10px] text-neutral-400 font-mono border border-white/5">
+                <Music size={12} className="text-emerald-400 flex-shrink-0 animate-pulse" />
+                <span className="truncate flex-1">{scanProgress.activeFileName}</span>
+              </div>
+            )}
           </div>
         </div>
       )}

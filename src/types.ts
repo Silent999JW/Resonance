@@ -15,6 +15,7 @@ export interface Track {
   artworkBlob?: Blob; // Dynamic blob cache
   fileHandle?: FileSystemFileHandle; // Optional for active FS Access APIs
   rawFile?: File; // For drag and dropped files
+  filePath?: string; // For native Electron desktop mode
 }
 
 export interface Playlist {
@@ -68,3 +69,20 @@ export const PRESETS: EqualizerPreset[] = [
   { name: 'Classical', gains: [3, 2, 1, 1, -1, -1, 0, 2, 2, 3] },
   { name: 'Pop', gains: [-1, -1, 0, 2, 4, 4, 1, -1, -1, -1] }
 ];
+
+declare global {
+  interface Window {
+    electron?: {
+      isElectron: boolean;
+      chooseDirectory: () => Promise<string | null>;
+      scanDirectory: (dirPath: string) => Promise<{ name: string; path: string; size: number; mtime: number }[]>;
+      getFileMetadataChunk: (filePath: string) => Promise<{ name: string; size: number; mtime: number; buffer: Uint8Array }>;
+      readFileAsArrayBuffer: (filePath: string) => Promise<Uint8Array>;
+      showItemInFolder: (filePath: string) => Promise<boolean>;
+      openPath: (dirPath: string) => Promise<boolean>;
+      saveZipDialog: (defaultName: string) => Promise<string | null>;
+      writeFile: (filePath: string, arrayBuffer: ArrayBuffer) => Promise<boolean>;
+    };
+  }
+}
+
