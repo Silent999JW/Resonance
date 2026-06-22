@@ -1,0 +1,19 @@
+{
+  "name": "Resonance Hi-Fi Player",
+  "short_name": "Resonance",
+  "description": "High-Resolution Local Audio Player with Gapless Transitions, 10-Band EQ, and Studio Master rendering.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "orientation": "any",
+  "categories": ["music", "audio", "utilities"],
+  "icons": [
+    {
+      "src": "/src/assets/images/resonance_app_icon_1782061008447.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

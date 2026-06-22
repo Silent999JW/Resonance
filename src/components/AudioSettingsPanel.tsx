@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sliders, RefreshCw, Volume2, Flame, Settings, Sparkles, ChevronDown, Sun, Moon, Palette } from 'lucide-react';
+import { Sliders, RefreshCw, Volume2, Flame, Settings, Sparkles, ChevronDown, Sun, Moon, Palette, Laptop, Download, ClipboardCheck, Clipboard, ExternalLink } from 'lucide-react';
 import { AppSettings, EQ_BANDS, PRESETS } from '../types';
 import { audioEngine } from '../utils/audioEngine';
 
@@ -10,6 +10,8 @@ interface AudioSettingsPanelProps {
   onRescan: () => void;
   isScanning: boolean;
   onClearLibrary: () => void;
+  showPwaInstallBtn?: boolean;
+  onInstallPWA?: () => void;
 }
 
 export default function AudioSettingsPanel({
@@ -19,8 +21,19 @@ export default function AudioSettingsPanel({
   onRescan,
   isScanning,
   onClearLibrary,
+  showPwaInstallBtn = false,
+  onInstallPWA,
 }: AudioSettingsPanelProps) {
   const [activeEqPreset, setActiveEqPreset] = useState<string>('Custom');
+  const [copyState, setCopyState] = useState<Record<string, boolean>>({});
+
+  const handleCopyCommand = (key: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopyState((prev) => ({ ...prev, [key]: true }));
+    setTimeout(() => {
+      setCopyState((prev) => ({ ...prev, [key]: false }));
+    }, 2000);
+  };
 
   // Sync EQ values if a preset is clicked
   const applyPreset = (presetName: string) => {
@@ -399,6 +412,132 @@ export default function AudioSettingsPanel({
             >
               Clear Cache
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* App Mode Integration */}
+      <div className="acrylic-card dark:acrylic-card light:acrylic-card-light p-6 rounded-2xl space-y-6">
+        <div className="flex items-center space-x-3 border-b border-white/5 dark:border-white/5 light:border-black/5 pb-4">
+          <div className={`p-2 rounded-lg ${accentColorClass} bg-opacity-10 ${accentTextColor}`}>
+            <Laptop size={20} />
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg text-white">App Mode Integration</h3>
+            <p className="text-xs text-neutral-400">Run Resonance as an un-sandboxed standalone application to enable permanent folder permissions</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Method 1: Progressive Web App */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-mono font-bold">1</span>
+              <h4 className="text-sm font-semibold text-white dark:text-white light:text-zinc-800">Progressive Web App (PWA)</h4>
+            </div>
+            
+            <p className="text-xs text-neutral-400 leading-relaxed">
+              Inside browser iframes (like this sandbox), security policies prohibit persistent folder permissions. Running Resonance in a standalone app frame unlocks infinite persistence.
+            </p>
+
+            <div className="bg-neutral-900/40 p-4 rounded-xl border border-white/5 space-y-3">
+              <div className="flex justify-between items-center text-[11px] font-mono text-neutral-400">
+                <span>PWA INSTALL STATUS</span>
+                <span className={showPwaInstallBtn ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+                  {showPwaInstallBtn ? "● INSTALL READY" : "● RUNNING SECURE"}
+                </span>
+              </div>
+              
+              <div className="space-y-2">
+                <button
+                  onClick={() => window.open(window.location.href, '_blank')}
+                  className="w-full bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs py-2 px-3 rounded-lg flex items-center justify-center space-x-1.5 transition border border-white/5"
+                  id="pwa-launch-tab-btn"
+                >
+                  <ExternalLink size={12} />
+                  <span>Launch Sandbox-Free (New Tab)</span>
+                </button>
+
+                {showPwaInstallBtn ? (
+                  <button
+                    onClick={onInstallPWA}
+                    className={`w-full ${accentColorClass} text-white font-bold text-xs py-2 px-3 rounded-lg flex items-center justify-center space-x-1.5 transition shadow hover:brightness-110`}
+                    id="pwa-trigger-install-btn"
+                  >
+                    <Download size={12} />
+                    <span>Install Desktop App (PWA)</span>
+                  </button>
+                ) : (
+                  <div className="text-[10px] text-center text-neutral-400 leading-tight pt-1">
+                    💡 <em>Tip: Open in a <strong>New Tab</strong> first, then click the <strong>Install App</strong> icon in Chrome's Address Bar to save it to your desktop!</em>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Method 2: Native Electron Desktop App */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-mono font-bold">2</span>
+              <h4 className="text-sm font-semibold text-white dark:text-white light:text-zinc-800">Native Desktop Player (Electron)</h4>
+            </div>
+
+            <p className="text-xs text-neutral-400 leading-relaxed">
+              This codebase comes completely pre-configured for **Electron** with high-resolution music driver supports. Safe from all browser limitations, it reads original paths instantly.
+            </p>
+
+            <div className="space-y-2">
+              {/* Command 1 */}
+              <div className="bg-neutral-900/40 px-3 py-2 rounded-xl border border-white/5 flex items-center justify-between font-mono text-[11px]">
+                <div className="truncate pr-2">
+                  <span className="text-neutral-500 mr-2">$</span>
+                  <span className="text-neutral-200">npm install</span>
+                </div>
+                <button
+                  onClick={() => handleCopyCommand('cmd-install', 'npm install')}
+                  className="text-neutral-400 hover:text-white transition p-1"
+                  title="Copy command"
+                >
+                  {copyState['cmd-install'] ? <ClipboardCheck size={13} className="text-emerald-400" /> : <Clipboard size={13} />}
+                </button>
+              </div>
+
+              {/* Command 2 */}
+              <div className="bg-neutral-900/40 px-3 py-2 rounded-xl border border-white/5 flex items-center justify-between font-mono text-[11px]">
+                <div className="truncate pr-2">
+                  <span className="text-neutral-500 mr-2">$</span>
+                  <span className="text-neutral-200">npm run electron:start</span>
+                </div>
+                <button
+                  onClick={() => handleCopyCommand('cmd-start', 'npm run electron:start')}
+                  className="text-neutral-400 hover:text-white transition p-1"
+                  title="Copy command"
+                >
+                  {copyState['cmd-start'] ? <ClipboardCheck size={13} className="text-emerald-400" /> : <Clipboard size={13} />}
+                </button>
+              </div>
+
+              {/* Command 3 */}
+              <div className="bg-neutral-900/40 px-3 py-2 rounded-xl border border-white/5 flex items-center justify-between font-mono text-[11px]">
+                <div className="truncate pr-2">
+                  <span className="text-neutral-500 mr-2">$</span>
+                  <span className="text-neutral-200">build_desktop.bat</span>
+                </div>
+                <button
+                  onClick={() => handleCopyCommand('cmd-build', 'build_desktop.bat')}
+                  className="text-neutral-400 hover:text-white transition p-1"
+                  title="Copy command"
+                >
+                  {copyState['cmd-build'] ? <ClipboardCheck size={13} className="text-emerald-400" /> : <Clipboard size={13} />}
+                </button>
+              </div>
+
+              <div className="text-[10px] text-neutral-400 leading-tight flex items-start space-x-1.5 pt-1">
+                <span className="text-emerald-400 font-bold">✓</span>
+                <span>Run <code>build_desktop.bat</code> to compile a standalone, offline <code>.exe</code> installer for Windows!</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

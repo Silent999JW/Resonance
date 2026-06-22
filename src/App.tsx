@@ -123,6 +123,43 @@ export default function App() {
   // Custom metadata visual editor
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
 
+  // PWA app installation prompt triggers
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showPwaInstallBtn, setShowPwaInstallBtn] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowPwaInstallBtn(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // If app is already installed/running in standalone display-mode
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setShowPwaInstallBtn(false);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallPWA = async () => {
+    if (!deferredPrompt) return;
+    try {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`User response to PWA install: ${outcome}`);
+    } catch (err) {
+      console.error('Failed to dispatch install prompt:', err);
+    } finally {
+      setDeferredPrompt(null);
+      setShowPwaInstallBtn(false);
+    }
+  };
+
   // Playback state mirroring from engine
   const [playbackState, setPlaybackState] = useState<AudioEngineState>({
     isPlaying: false,
@@ -1627,6 +1664,8 @@ export default function App() {
                 }}
                 isScanning={isScanning}
                 onClearLibrary={handleClearLibraryData}
+                showPwaInstallBtn={showPwaInstallBtn}
+                onInstallPWA={handleInstallPWA}
               />
             </div>
           )}
