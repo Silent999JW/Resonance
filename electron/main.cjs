@@ -103,7 +103,12 @@ if (!app.requestSingleInstanceLock()) {
         }
 
         const fileUrl = pathToFileURL(fileRawPath).toString();
-        return net.fetch(fileUrl);
+        const reqHeaders = {};
+        const rangeHeader = request.headers.get('range');
+        if (rangeHeader) {
+          reqHeaders['range'] = rangeHeader;
+        }
+        return net.fetch(fileUrl, { headers: reqHeaders });
       } catch (err) {
         console.error('Failed to handle media request:', err);
         return new Response('File access error', { status: 500 });

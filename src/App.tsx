@@ -46,6 +46,14 @@ import MiniPlayer from './components/MiniPlayer';
 // Import JSZip for playlist export
 import JSZip from 'jszip';
 
+const formatTime = (secs: number) => {
+  if (isNaN(secs)) return '0:00';
+  if (!isFinite(secs)) return '--:--';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
 export default function App() {
   // --- LIBRARY STATE ---
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -1596,11 +1604,7 @@ export default function App() {
 
               {/* Slider Seek layout */}
               <div className="w-full flex items-center space-x-2.5 text-[10px] sm:text-[10.5px] font-mono text-neutral-400" id="dock-seek-row">
-                <span>
-                  {Math.floor(playbackState.currentTime / 60)}:
-                  {Math.floor(playbackState.currentTime % 60) < 10 ? '0' : ''}
-                  {Math.floor(playbackState.currentTime % 60)}
-                </span>
+                <span>{formatTime(playbackState.currentTime)}</span>
 
                 <div className="flex-1 relative h-1 bg-neutral-800 rounded-full group cursor-pointer">
                   <input
@@ -1618,11 +1622,7 @@ export default function App() {
                   />
                 </div>
 
-                <span>
-                  {Math.floor(playbackState.duration / 60)}:
-                  {Math.floor(playbackState.duration % 60) < 10 ? '0' : ''}
-                  {Math.floor(playbackState.duration % 60)}
-                </span>
+                <span>{formatTime(playbackState.duration)}</span>
               </div>
             </div>
 
