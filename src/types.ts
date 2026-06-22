@@ -14,7 +14,7 @@ export interface Track {
   artworkUrl?: string; // Cache URL
   artworkBlob?: Blob; // Dynamic blob cache
   fileHandle?: FileSystemFileHandle; // Optional for active FS Access APIs
-  rawFile?: File; // For drag and dropped files
+  rawFile?: File | Blob; // For drag and dropped files
   filePath?: string; // For native Electron desktop mode
 }
 

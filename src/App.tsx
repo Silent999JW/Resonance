@@ -461,12 +461,14 @@ export default function App() {
         const trackId = `track_${file.name}_${file.size}_${file.lastModified}`;
         const filePath = (file as any).path;
 
+        const persistentBlob = window.electron ? undefined : new Blob([file], { type: file.type || 'audio/mpeg' });
+
         const finalTrack: Track = {
           id: trackId,
           ...metadata,
           playCount: 0,
           addedAt: Date.now(),
-          rawFile: window.electron ? undefined : file,
+          rawFile: persistentBlob,
           filePath: window.electron ? filePath : undefined,
         };
 
@@ -692,7 +694,7 @@ export default function App() {
       // Loop over and load the actual physical tracks binary data
       for (let i = 0; i < listTracks.length; i++) {
         const track = listTracks[i];
-        let file: File;
+        let file: File | Blob;
 
         if (track.rawFile) {
           file = track.rawFile;
@@ -717,7 +719,7 @@ export default function App() {
         }
 
         // Deduplicate filename if multiple files are named "01. Song.mp3"
-        let uniqueName = file.name;
+        let uniqueName = track.fileName;
         let dupCounter = 1;
         const bExt = uniqueName.split('.').pop() || 'mp3';
         const bName = uniqueName.replace(/\.[^/.]+$/, "");
@@ -777,57 +779,120 @@ export default function App() {
   const handlePlaySongDirect = async (track: Track, tracksScope: Track[]) => {
     let resolvedTrack = track;
 
-    // Self-healing: if in the browser and file source is missing or stale, attempt lookup in authorized folders
-    if (!window.electron && !track.rawFile) {
-      let healingRequired = !track.fileHandle;
-      if (track.fileHandle) {
+    // Self-healing: if in the browser, check if file source is valid/readable; if not, authorize and heal
+    if (!window.electron) {
+      let fileValid = false;
+      if (track.rawFile) {
         try {
-          await track.fileHandle.getFile();
+          // Asynchronously test if the rawFile is a valid readable blob/handle snapshot
+          await track.rawFile.slice(0, 1).arrayBuffer();
+          fileValid = true;
         } catch (e) {
-          healingRequired = true;
+          fileValid = false;
         }
       }
 
-      if (healingRequired && folders.length > 0) {
-        let healedTrack: Track | null = null;
-        for (const f of folders) {
+      if (!fileValid) {
+        // Step 1: Try reading from own fileHandle, prompting if needed
+        if (track.fileHandle) {
           try {
-            const hasPermission = await f.handle.queryPermission({ mode: 'read' }) === 'granted';
-            if (hasPermission) {
-              // Recursive finder helper
-              const findFileInDirectory = async (dirHandle: FileSystemDirectoryHandle, targetName: string): Promise<FileSystemFileHandle | null> => {
-                for await (const entry of (dirHandle as any).values()) {
-                  if (entry.kind === 'file' && entry.name === targetName) {
-                    return entry;
-                  } else if (entry.kind === 'directory') {
-                    const result = await findFileInDirectory(entry, targetName);
-                    if (result) return result;
-                  }
-                }
-                return null;
-              };
-
-              const fileHandle = await findFileInDirectory(f.handle, track.fileName);
-              if (fileHandle) {
-                const file = await fileHandle.getFile();
-                healedTrack = {
+            const status = await (track.fileHandle as any).queryPermission({ mode: 'read' });
+            if (status !== 'granted') {
+              const requested = await (track.fileHandle as any).requestPermission({ mode: 'read' });
+              if (requested === 'granted') {
+                const file = await track.fileHandle.getFile();
+                resolvedTrack = {
                   ...track,
-                  fileHandle,
                   rawFile: file,
                 };
-                break;
+                fileValid = true;
               }
+            } else {
+              const file = await track.fileHandle.getFile();
+              resolvedTrack = {
+                ...track,
+                rawFile: file,
+              };
+              fileValid = true;
             }
           } catch (e) {
-            console.warn('Silent folder file lookup healing failed on directory entry:', e);
+            console.warn('Track fileHandle authorization request failed:', e);
           }
         }
 
-        if (healedTrack) {
-          resolvedTrack = healedTrack;
-          // Optimistically update memory states & DB to match recovered source
-          setTracks((prev) => prev.map((t) => t.id === track.id ? healedTrack! : t));
-          await musicDb.saveTrack(healedTrack);
+        // Step 2: Try prompting folders permissions and re-triggering file retrieval
+        if (!fileValid && folders.length > 0) {
+          let folderAuthorized = false;
+          for (const f of folders) {
+            try {
+              const status = await f.handle.queryPermission({ mode: 'read' });
+              if (status !== 'granted') {
+                const requested = await f.handle.requestPermission({ mode: 'read' });
+                if (requested === 'granted') {
+                  folderAuthorized = true;
+                }
+              } else {
+                folderAuthorized = true;
+              }
+            } catch (err) {
+              console.warn('Folder requestPermission fail:', err);
+            }
+          }
+
+          // Retry Own Handle first
+          if (track.fileHandle) {
+            try {
+              const file = await track.fileHandle.getFile();
+              resolvedTrack = {
+                ...track,
+                rawFile: file,
+              };
+              fileValid = true;
+            } catch (e) {
+              console.warn('File read failed even after folder permissions:', e);
+            }
+          } else if (track.fileName) {
+            // Find file inside folders dynamically
+            for (const f of folders) {
+              try {
+                // Check if directory permission is active
+                const pStatus = await f.handle.queryPermission({ mode: 'read' });
+                if (pStatus === 'granted') {
+                  const findFileInDirectory = async (dirHandle: FileSystemDirectoryHandle, targetName: string): Promise<FileSystemFileHandle | null> => {
+                    for await (const entry of (dirHandle as any).values()) {
+                      if (entry.kind === 'file' && entry.name === targetName) {
+                        return entry;
+                      } else if (entry.kind === 'directory') {
+                        const result = await findFileInDirectory(entry, targetName);
+                        if (result) return result;
+                      }
+                    }
+                    return null;
+                  };
+
+                  const fileHandle = await findFileInDirectory(f.handle, track.fileName);
+                  if (fileHandle) {
+                    const file = await fileHandle.getFile();
+                    resolvedTrack = {
+                      ...track,
+                      fileHandle,
+                      rawFile: file,
+                    };
+                    fileValid = true;
+                    break;
+                  }
+                }
+              } catch (e) {
+                console.warn('Folder search failed:', e);
+              }
+            }
+          }
+        }
+
+        // If successfully recovered the track, save back into DB & React states
+        if (fileValid && resolvedTrack.rawFile) {
+          setTracks((prev) => prev.map((t) => t.id === track.id ? resolvedTrack : t));
+          await musicDb.saveTrack(resolvedTrack);
         }
       }
     }
