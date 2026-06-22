@@ -2,6 +2,19 @@ const { app, BrowserWindow, ipcMain, dialog, protocol, shell, net } = require('e
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
+const { Readable } = require('stream');
+
+function getMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case '.mp3': return 'audio/mpeg';
+    case '.wav': return 'audio/wav';
+    case '.flac': return 'audio/flac';
+    case '.ogg': case '.oga': return 'audio/ogg';
+    case '.m4a': return 'audio/mp4';
+    default: return 'audio/mpeg';
+  }
+}
 
 // Register media:// custom protocol scheme
 protocol.registerSchemesAsPrivileged([
@@ -65,23 +78,28 @@ if (!app.requestSingleInstanceLock()) {
     protocol.handle('media', (request) => {
       try {
         const rawUrl = request.url;
+        const parsedUrl = new URL(rawUrl);
         let fileRawPath = '';
 
-        if (rawUrl.startsWith('media://local-file/')) {
+        if (parsedUrl.searchParams.has('path')) {
+          fileRawPath = parsedUrl.searchParams.get('path') || '';
+        } else if (rawUrl.startsWith('media://local-file/')) {
           fileRawPath = decodeURIComponent(rawUrl.slice('media://local-file/'.length));
-        } else if (rawUrl.includes('?path=')) {
-          const parsed = new URL(rawUrl);
-          fileRawPath = parsed.searchParams.get('path') || '';
         } else {
           fileRawPath = decodeURIComponent(rawUrl.slice('media://'.length));
         }
 
-        // Clean up trailing slash if any standard URL parser added it
+        // Clean up trailing slash if any standard URL parser appended it
         if (fileRawPath.endsWith('/')) {
-          fileRawPath = fileRawPath.slice(0, -1);
+          if (!fs.existsSync(fileRawPath) && fs.existsSync(fileRawPath.slice(0, -1))) {
+            fileRawPath = fileRawPath.slice(0, -1);
+          }
         }
 
-        // Clean up Windows and Linux absolute paths from the custom URL structure
+        // Normalize slashes
+        fileRawPath = fileRawPath.replace(/\\/g, '/');
+
+        // Clean up Windows and Linux absolute paths
         if (fileRawPath.startsWith('///')) {
           fileRawPath = fileRawPath.slice(3);
         } else if (fileRawPath.startsWith('//')) {
@@ -93,22 +111,56 @@ if (!app.requestSingleInstanceLock()) {
           }
         }
 
-        // If it starts with some other slash structure or has backslashes, clean it
-        fileRawPath = fileRawPath.replace(/\\/g, '/');
-
         // Check if file exists
         if (!fs.existsSync(fileRawPath)) {
           console.error(`Media protocol file not found physically: "${fileRawPath}"`);
           return new Response('File not found: ' + fileRawPath, { status: 404 });
         }
 
-        const fileUrl = pathToFileURL(fileRawPath).toString();
-        const reqHeaders = {};
+        const stats = fs.statSync(fileRawPath);
+        const mimeType = getMimeType(fileRawPath);
         const rangeHeader = request.headers.get('range');
-        if (rangeHeader) {
-          reqHeaders['range'] = rangeHeader;
+
+        if (!rangeHeader) {
+          const nodeStream = fs.createReadStream(fileRawPath);
+          const webStream = Readable.toWeb(nodeStream);
+          return new Response(webStream, {
+            status: 200,
+            headers: {
+              'Content-Type': mimeType,
+              'Content-Length': stats.size.toString(),
+              'Accept-Ranges': 'bytes'
+            }
+          });
         }
-        return net.fetch(fileUrl, { headers: reqHeaders });
+
+        // Parse Range request header (e.g. bytes=0- or bytes=100-200)
+        const parts = rangeHeader.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
+
+        if (isNaN(start) || start >= stats.size || end >= stats.size || start > end) {
+          return new Response('', {
+            status: 416,
+            headers: {
+              'Content-Range': `bytes */${stats.size}`
+            }
+          });
+        }
+
+        const chunksize = (end - start) + 1;
+        const nodeStream = fs.createReadStream(fileRawPath, { start, end });
+        const webStream = Readable.toWeb(nodeStream);
+
+        return new Response(webStream, {
+          status: 206,
+          headers: {
+            'Content-Range': `bytes ${start}-${end}/${stats.size}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunksize.toString(),
+            'Content-Type': mimeType
+          }
+        });
       } catch (err) {
         console.error('Failed to handle media request:', err);
         return new Response('File access error', { status: 500 });
