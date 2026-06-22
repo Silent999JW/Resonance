@@ -249,7 +249,7 @@ class AudioEngine {
     if (track.rawFile) {
       objectUrl = URL.createObjectURL(track.rawFile);
     } else if (track.filePath) {
-      objectUrl = `media://${encodeURIComponent(track.filePath)}`;
+      objectUrl = `media://local-file?path=${encodeURIComponent(track.filePath)}`;
     } else if (track.fileHandle) {
       try {
         const file = await track.fileHandle.getFile();
@@ -357,7 +357,7 @@ class AudioEngine {
     if (track.rawFile) {
       objectUrl = URL.createObjectURL(track.rawFile);
     } else if (track.filePath) {
-      objectUrl = `media://${encodeURIComponent(track.filePath)}`;
+      objectUrl = `media://local-file?path=${encodeURIComponent(track.filePath)}`;
     } else if (track.fileHandle) {
       try {
         const file = await track.fileHandle.getFile();

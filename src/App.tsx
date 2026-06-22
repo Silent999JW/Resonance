@@ -21,6 +21,8 @@ import {
   Activity,
   ArrowRight,
   Minimize2,
+  Maximize2,
+  XCircle,
   Download,
   Pin,
   Check,
@@ -77,6 +79,8 @@ export default function App() {
   // Background utilities state
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanProgress, setScanProgress] = useState<{ current: number; total: number; activeFileName: string } | null>(null);
+  const [isScanMinimized, setIsScanMinimized] = useState<boolean>(false);
+  const scanCancelledRef = useRef<boolean>(false);
   const [zipProgress, setZipProgress] = useState<number | null>(null);
   const [zipActiveName, setZipActiveName] = useState<string>('');
   const [isShuffle, setIsShuffle] = useState<boolean>(false);
@@ -289,6 +293,8 @@ export default function App() {
     if (window.electron) {
       try {
         setIsScanning(true);
+        scanCancelledRef.current = false;
+        setIsScanMinimized(false);
         const selectedDir = await window.electron.chooseDirectory();
         if (!selectedDir) {
           setIsScanning(false);
@@ -309,6 +315,10 @@ export default function App() {
         setScanProgress({ current: 0, total: totalCount, activeFileName: '' });
 
         for (const nativeFile of nativeFiles) {
+          if (scanCancelledRef.current) {
+            console.log('User cancelled music folder scanning.');
+            break;
+          }
           try {
             currentCount++;
             setScanProgress({ current: currentCount, total: totalCount, activeFileName: nativeFile.name });
@@ -347,6 +357,7 @@ export default function App() {
       } finally {
         setIsScanning(false);
         setScanProgress(null);
+        setIsScanMinimized(false);
       }
       return;
     }
@@ -1092,7 +1103,7 @@ export default function App() {
       />
 
       {/* Main Center Dashboard Section */}
-      <div className="flex-1 flex flex-col justify-between h-full relative" id="main-content-display-port">
+      <div className="flex-1 min-w-0 flex flex-col justify-between h-full relative" id="main-content-display-port">
         
         {/* Top Header Controls bar */}
         <header className="flex flex-col sm:flex-row items-center justify-between p-6 border-b border-white/[0.06] dark:border-white/[0.06] light:border-black/[0.06] bg-black/5 dark:bg-black/10 light:bg-white/10 backdrop-blur-md space-y-4 sm:space-y-0 z-10" id="header-top-panel">
@@ -1818,37 +1829,87 @@ export default function App() {
 
       {/* Live Index/Scan progress status bar visual indicator */}
       {scanProgress !== null && (
-        <div className="fixed inset-0 bg-neutral-950/85 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in" id="scan-progress-modal">
-          <div className="bg-neutral-900 border border-white/5 p-6 rounded-2xl w-full max-w-sm space-y-4 shadow-2xl">
-            <div className="text-center">
-              <FolderSync className="mx-auto text-emerald-400 mb-2 animate-spin" size={32} />
-              <h4 className="font-bold text-white uppercase text-xs tracking-wider font-mono">Indexing Music Folder</h4>
-              <p className="text-[11px] text-neutral-400 mt-1 truncate">
-                Processing offline files...
-              </p>
+        isScanMinimized ? (
+          <div 
+            className="fixed bottom-6 right-6 bg-neutral-900/95 border border-white/10 p-3.5 rounded-2xl shadow-2xl flex items-center space-x-4 z-50 backdrop-blur-md animate-fade-in hover:border-emerald-500/20 transition-all duration-300"
+            id="scan-progress-minimized"
+          >
+            <FolderSync className={`animate-spin flex-shrink-0 ${customAccentText}`} size={18} />
+            <div className="flex flex-col min-w-[120px] max-w-[200px]">
+              <span className="text-[10px] font-bold text-white uppercase tracking-wider font-mono">Indexing Music...</span>
+              <span className="text-[9px] text-neutral-400 truncate mt-0.5">{scanProgress.current}/{scanProgress.total} ({scanProgress.total > 0 ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0}%)</span>
             </div>
-
-            <div className="space-y-1.5">
-              <div className="w-full h-1.5 bg-neutral-950 rounded-full overflow-hidden">
-                <div 
-                  style={{ width: `${scanProgress.total > 0 ? (scanProgress.current / scanProgress.total) * 100 : 0}%` }} 
-                  className={`h-full class-transition rounded-full ${customAccentBg}`} 
-                />
-              </div>
-              <div className="flex justify-between items-center text-[10px] text-neutral-500 font-mono">
-                <span>Progress ({scanProgress.current} / {scanProgress.total})</span>
-                <span>{scanProgress.total > 0 ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0}%</span>
-              </div>
+            <div className="flex items-center space-x-1 border-l border-white/5 pl-2 leading-none">
+              <button
+                onClick={() => setIsScanMinimized(false)}
+                className="p-1.5 hover:bg-white/5 text-neutral-400 hover:text-white rounded-lg transition"
+                title="Expand Indexer"
+              >
+                <Maximize2 size={13} />
+              </button>
+              <button
+                onClick={() => {
+                  scanCancelledRef.current = true;
+                }}
+                className="p-1.5 hover:bg-rose-500/10 text-neutral-400 hover:text-rose-400 rounded-lg transition"
+                title="Cancel Scan"
+              >
+                <XCircle size={13} />
+              </button>
             </div>
-
-            {scanProgress.activeFileName && (
-              <div className="py-2.5 bg-white/5 rounded-xl px-4 flex items-center space-x-2 text-[10px] text-neutral-400 font-mono border border-white/5">
-                <Music size={12} className="text-emerald-400 flex-shrink-0 animate-pulse" />
-                <span className="truncate flex-1">{scanProgress.activeFileName}</span>
-              </div>
-            )}
           </div>
-        </div>
+        ) : (
+          <div className="fixed inset-0 bg-neutral-950/85 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in" id="scan-progress-modal">
+            <div className="bg-neutral-900 border border-white/10 p-6 rounded-2xl w-full max-w-sm space-y-4 shadow-2xl">
+              <div className="text-center">
+                <FolderSync className="mx-auto text-emerald-400 mb-2 animate-spin" size={32} />
+                <h4 className="font-bold text-white uppercase text-xs tracking-wider font-mono">Indexing Music Folder</h4>
+                <p className="text-[11px] text-neutral-400 mt-1 truncate">
+                  Processing offline files...
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="w-full h-1.5 bg-neutral-950 rounded-full overflow-hidden">
+                  <div 
+                    style={{ width: `${scanProgress.total > 0 ? (scanProgress.current / scanProgress.total) * 100 : 0}%` }} 
+                    className={`h-full class-transition rounded-full ${customAccentBg}`} 
+                  />
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-neutral-500 font-mono">
+                  <span>Progress ({scanProgress.current} / {scanProgress.total})</span>
+                  <span>{scanProgress.total > 0 ? Math.round((scanProgress.current / scanProgress.total) * 100) : 0}%</span>
+                </div>
+              </div>
+
+              {scanProgress.activeFileName && (
+                <div className="py-2.5 bg-white/5 rounded-xl px-4 flex items-center space-x-2 text-[10px] text-neutral-400 font-mono border border-white/5 animate-pulse">
+                  <Music size={12} className="text-emerald-400 flex-shrink-0" />
+                  <span className="truncate flex-1">{scanProgress.activeFileName}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5">
+                <button
+                  onClick={() => setIsScanMinimized(true)}
+                  className="py-2 text-[11px] font-bold text-neutral-450 hover:text-white rounded-lg bg-white/5 hover:bg-white/10 transition flex items-center justify-center space-x-1.5"
+                >
+                  <Minimize2 size={12} />
+                  <span>Minimize</span>
+                </button>
+                <button
+                  onClick={() => {
+                    scanCancelledRef.current = true;
+                  }}
+                  className="py-2 text-[11px] font-bold text-rose-450 hover:text-rose-300 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 transition flex items-center justify-center space-x-1.5"
+                >
+                  <XCircle size={12} />
+                  <span>Cancel Scan</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )
       )}
 
     </div>

@@ -45,7 +45,7 @@ export default function TrackList({
   onSort,
 }: TrackListProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 80;
+  const itemsPerPage = 100;
 
   // Reset pagination when tracks list changes (on change tab, filter, sort, search)
   useEffect(() => {

@@ -94,7 +94,7 @@ export default function Sidebar({
 
   return (
     <div
-      className="w-16 sm:w-60 md:w-64 flex flex-col justify-between border-r h-full relative z-20 transition-all duration-300 bg-black/30 border-white/[0.06] backdrop-blur-3xl text-zinc-100"
+      className="w-16 sm:w-60 md:w-64 flex-shrink-0 flex flex-col justify-between border-r h-full relative z-20 transition-all duration-300 bg-black/30 border-white/[0.06] backdrop-blur-3xl text-zinc-100"
       id="desktop-sidebar-root"
     >
       <div className="flex-1 overflow-y-auto no-scrollbar py-4 px-2 sm:py-6 sm:px-4 space-y-6" id="sidebar-scrollable">

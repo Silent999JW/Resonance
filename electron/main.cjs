@@ -14,6 +14,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    minWidth: 800,
+    minHeight: 600,
     title: "Resonance — Hi-Res Desktop Player",
     backgroundColor: '#0a0a0a',
     show: false,
@@ -63,17 +65,24 @@ if (!app.requestSingleInstanceLock()) {
     protocol.handle('media', (request) => {
       try {
         const rawUrl = request.url;
-        let fileRawPath = decodeURIComponent(rawUrl.slice('media://'.length));
+        let fileRawPath = '';
 
-        // Clean up Windows and Linux absolute paths from the custom URL structure
-        if (fileRawPath.startsWith('///')) {
-          fileRawPath = fileRawPath.slice(3);
-        } else if (fileRawPath.startsWith('//')) {
-          fileRawPath = fileRawPath.slice(2);
-        } else if (fileRawPath.startsWith('/')) {
-          // On Windows, /C:/music.mp3 should become C:/music.mp3
-          if (fileRawPath[2] === ':' || fileRawPath[1] === ':') {
-            fileRawPath = fileRawPath.slice(1);
+        if (rawUrl.includes('?path=')) {
+          const parsed = new URL(rawUrl);
+          fileRawPath = parsed.searchParams.get('path') || '';
+        } else {
+          fileRawPath = decodeURIComponent(rawUrl.slice('media://'.length));
+
+          // Clean up Windows and Linux absolute paths from the custom URL structure
+          if (fileRawPath.startsWith('///')) {
+            fileRawPath = fileRawPath.slice(3);
+          } else if (fileRawPath.startsWith('//')) {
+            fileRawPath = fileRawPath.slice(2);
+          } else if (fileRawPath.startsWith('/')) {
+            // On Windows, /C:/music.mp3 should become C:/music.mp3
+            if (fileRawPath[2] === ':' || fileRawPath[1] === ':') {
+              fileRawPath = fileRawPath.slice(1);
+            }
           }
         }
 
