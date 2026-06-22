@@ -324,6 +324,51 @@ export default function AudioSettingsPanel({
             </div>
 
             <div className="space-y-4">
+              {/* Playback render protocol toggle */}
+              <div className="bg-neutral-950/40 dark:bg-neutral-950/40 light:bg-zinc-100 p-4 rounded-xl border border-white/5 dark:border-white/5 light:border-zinc-300 space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-neutral-400 dark:text-neutral-400 light:text-zinc-600 font-semibold">Playback Engine</span>
+                  <span className="font-bold text-white dark:text-white light:text-zinc-900 font-mono">
+                    {settings.directPlaybackMode ? 'Acoustic Pure' : 'Studio Master'}
+                  </span>
+                </div>
+                <div className="text-[11px] text-neutral-400 dark:text-neutral-400 light:text-zinc-600 leading-tight">
+                  Toggle client audio drivers. <strong>Acoustic Pure</strong> is 100% robust and bypasses browser sandbox file-system blocks.
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 pt-1.5">
+                  <button
+                    onClick={() => {
+                      audioEngine.setUseWebAudio(false);
+                      onUpdateSettings({ directPlaybackMode: true });
+                    }}
+                    className={`py-1.5 rounded-md text-[9px] uppercase tracking-wider font-mono border transition ${
+                      settings.directPlaybackMode
+                        ? `${accentColorClass} text-white border-transparent font-bold shadow`
+                        : 'bg-neutral-900 text-neutral-400 hover:text-white border-white/5'
+                    }`}
+                    title="Bypasses browser sandboxes & limits, ensuring 100% stable play on reloads"
+                    id="settings-engine-direct"
+                  >
+                    Acoustic Pure
+                  </button>
+                  <button
+                    onClick={() => {
+                      audioEngine.setUseWebAudio(true);
+                      onUpdateSettings({ directPlaybackMode: false });
+                    }}
+                    className={`py-1.5 rounded-md text-[9px] uppercase tracking-wider font-mono border transition ${
+                      !settings.directPlaybackMode
+                        ? `${accentColorClass} text-white border-transparent font-bold shadow`
+                        : 'bg-neutral-900 text-neutral-400 hover:text-white border-white/5'
+                    }`}
+                    title="Enables high-fidelity 10-band EQ & spectrum analyzer. Requires native browser folder permission"
+                    id="settings-engine-web-audio"
+                  >
+                    Studio Master
+                  </button>
+                </div>
+              </div>
+
               <div className="bg-neutral-950/40 dark:bg-neutral-950/40 light:bg-zinc-100 p-4 rounded-xl border border-white/5 dark:border-white/5 light:border-zinc-300 space-y-2">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-neutral-400 dark:text-neutral-400 light:text-zinc-600 font-semibold">Folders Monitored</span>

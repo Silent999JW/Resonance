@@ -55,6 +55,7 @@ export interface AppSettings {
   playbackSpeed: number; // 0.5 to 2.0
   replayGainNormalized: boolean;
   premiumTheme?: string; // 'classic' | 'nebula' | 'sunset' | 'matrix' | 'aurora'
+  directPlaybackMode: boolean; // true to bypass Web Audio for extreme reliability, false to use Web Audio
 }
 
 export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]; // 10 frequencies

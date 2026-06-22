@@ -15,9 +15,13 @@ export type QualificationListener = (trackId: string, duration: number) => void;
 
 class AudioEngine {
   // We use two audio elements for crossfading and gapless transitions
-  private playerA: HTMLAudioElement;
-  private playerB: HTMLAudioElement;
+  private playerA!: HTMLAudioElement;
+  private playerB!: HTMLAudioElement;
   private activePlayer: 'A' | 'B' = 'A';
+
+  // Robust bypass toggle - if true, Web Audio Context EQ and Analyser are enabled.
+  // If false (default), plays direct via HTML5 Audio, which is 100% immune to iframe/CORS constraints.
+  private useWebAudio: boolean = false;
 
   // Web Audio Nodes
   private ctx: AudioContext | null = null;
@@ -55,21 +59,75 @@ class AudioEngine {
   private onTrackEndedListeners: Set<() => void> = new Set();
 
   constructor() {
+    this.recreatePlayers();
+  }
+
+  public getUseWebAudio(): boolean {
+    return this.useWebAudio;
+  }
+
+  public setUseWebAudio(enabled: boolean) {
+    if (this.useWebAudio === enabled) return;
+
+    // Stop current playbacks completely before tearing down nodes
+    this.stop();
+
+    this.useWebAudio = enabled;
+
+    // Tear down any existing AudioContext when switching to direct
+    if (!enabled) {
+      if (this.ctx) {
+        this.ctx.close().catch(console.error);
+        this.ctx = null;
+      }
+      this.sourceA = null;
+      this.sourceB = null;
+      this.gainA = null;
+      this.gainB = null;
+      this.masterGain = null;
+      this.analyser = null;
+      this.eqFilters = [];
+    }
+
+    // We MUST recreate HTMLAudioElement instances so they are disconnected
+    // from any previous Web Audio nodes in browser's memory.
+    this.recreatePlayers();
+  }
+
+  private recreatePlayers() {
+    try {
+      if (this.playerA) {
+        this.playerA.pause();
+        this.playerA.src = '';
+      }
+      if (this.playerB) {
+        this.playerB.pause();
+        this.playerB.src = '';
+      }
+    } catch (e) {
+      console.warn('Error clearing old players:', e);
+    }
+
     this.playerA = new Audio();
     this.playerB = new Audio();
 
-    // Setup standard media playback attributes
+    // Standard media settings preloading
     this.playerA.preload = 'auto';
     this.playerB.preload = 'auto';
-    this.playerA.crossOrigin = 'anonymous';
-    this.playerB.crossOrigin = 'anonymous';
+
+    // REMOVED crossOrigin = 'anonymous' as same-origin blobs can get blocked by CORS queries in sandboxed iframes
+    
+    this.playerA.volume = this.volume;
+    this.playerB.volume = this.activePlayer === 'B' ? 0 : this.volume;
+    this.playerA.playbackRate = this.speed;
+    this.playerB.playbackRate = this.speed;
 
     this.setupAudioListeners(this.playerA, 'A');
     this.setupAudioListeners(this.playerB, 'B');
   }
 
   private initCtx() {
-    if (this.ctx) return;
+    if (!this.useWebAudio || this.ctx) return;
     try {
       this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       this.analyser = this.ctx.createAnalyser();
@@ -127,6 +185,7 @@ class AudioEngine {
       this.analyser.connect(this.ctx.destination);
     } catch (e) {
       console.error('Failed to initialize AudioContext, falling back to simple media rendering:', e);
+      this.useWebAudio = false; // Fallback to direct HTML5 instantly
     }
   }
 
@@ -161,6 +220,17 @@ class AudioEngine {
 
     player.addEventListener('volumechange', () => {
       this.notifyState();
+    });
+
+    player.addEventListener('error', (e) => {
+      console.error(`Audio element ${tag} reported error:`, player.error);
+      if (this.activePlayer === tag) {
+        this.pauseTracking();
+        // Skip track automatically on decode/CORS/file reading failures
+        setTimeout(() => {
+          this.handlePlayerEnded(tag);
+        }, 1500);
+      }
     });
   }
 
@@ -279,11 +349,52 @@ class AudioEngine {
 
     nextPlayer.src = objectUrl;
     nextPlayer.playbackRate = this.speed;
-    nextPlayer.volume = 0; // Starts silent
     
     // We are fading in the new player while fading out the old
     const oldPlayer = this.getActivePlayerInstance();
+
+    // 1. Manual Volume-based native crossfade if Web Audio is bypassed/disabled
+    if (!this.useWebAudio) {
+      const durationMs = this.crossfadeDuration * 1000;
+      const intervalMs = 50;
+      const steps = durationMs / intervalMs;
+      let step = 0;
+      
+      const initialOldVolume = this.volume;
+      nextPlayer.volume = 0;
+
+      try {
+        await nextPlayer.play();
+      } catch (e) {
+        console.error('Failed to trigger native play during crossfade', e);
+      }
+
+      const fadeTimer = setInterval(() => {
+        step++;
+        const ratio = step / steps;
+        
+        // Linear native volume transition
+        oldPlayer.volume = initialOldVolume * Math.max(0, 1 - ratio);
+        nextPlayer.volume = this.volume * Math.min(1, ratio);
+        
+        if (ratio >= 1.0) {
+          clearInterval(fadeTimer);
+          oldPlayer.pause();
+          oldPlayer.currentTime = 0;
+          oldPlayer.volume = this.volume; // restore standard setting for next turn
+          nextPlayer.volume = this.volume;
+          
+          this.activePlayer = nextTag;
+          this.isCrossfadingInProgress = false;
+          this.initPlaySecondsTracking();
+          this.notifyState();
+        }
+      }, intervalMs);
+      return;
+    }
     
+    // 2. Web Audio-based crossfade
+    nextPlayer.volume = 0; // Web Audio controls actual gain instead
     this.initCtx();
 
     if (this.ctx && this.gainA && this.gainB) {
@@ -347,10 +458,11 @@ class AudioEngine {
   }
 
   public async playTrack(track: Track): Promise<void> {
-    this.initCtx();
-
-    if (this.ctx && this.ctx.state === 'suspended') {
-      await this.ctx.resume();
+    if (this.useWebAudio) {
+      this.initCtx();
+      if (this.ctx && this.ctx.state === 'suspended') {
+        await this.ctx.resume();
+      }
     }
 
     const player = this.getActivePlayerInstance();
@@ -389,10 +501,14 @@ class AudioEngine {
     player.playbackRate = this.speed;
     
     // Reset volume mapping
-    if (this.ctx && this.gainA && this.gainB) {
+    if (this.useWebAudio && this.ctx && this.gainA && this.gainB) {
       const now = this.ctx.currentTime;
       this.gainA.gain.setValueAtTime(this.activePlayer === 'A' ? 1 : 0, now);
       this.gainB.gain.setValueAtTime(this.activePlayer === 'B' ? 1 : 0, now);
+    } else {
+      // Direct Native HTML5 Mode: set direct volumes
+      this.playerA.volume = this.activePlayer === 'A' ? this.volume : 0;
+      this.playerB.volume = this.activePlayer === 'B' ? this.volume : 0;
     }
 
     try {

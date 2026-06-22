@@ -76,6 +76,7 @@ export default function App() {
     volume: 0.8,
     playbackSpeed: 1.0,
     replayGainNormalized: true,
+    directPlaybackMode: true,
   });
 
   // --- HUD / UI NAVIGATION STATE ---
@@ -157,6 +158,7 @@ export default function App() {
         const speed = await musicDb.getSetting<number>('playbackSpeed', 1.0);
         const normalized = await musicDb.getSetting<boolean>('replayGainNormalized', true);
         const premiumTheme = await musicDb.getSetting<string>('premiumTheme', 'classic');
+        const directPlay = await musicDb.getSetting<boolean>('directPlaybackMode', true);
 
         const loadedSettings: AppSettings = {
           theme,
@@ -168,11 +170,13 @@ export default function App() {
           playbackSpeed: speed,
           replayGainNormalized: normalized,
           premiumTheme,
+          directPlaybackMode: directPlay,
         };
 
         setSettings(loadedSettings);
 
         // Sync values directly into audioEngine
+        audioEngine.setUseWebAudio(!directPlay);
         audioEngine.setVolume(volume);
         audioEngine.setPlaybackSpeed(speed);
         audioEngine.setCrossfade(crossfade);
@@ -414,13 +418,18 @@ export default function App() {
           const metadata = await parseAudioMetadata(file, fileHandle);
 
           const trackId = `track_${file.name}_${file.size}_${file.lastModified}`;
+          // Convert the short-lived transient File snapshot into a persistent Web Blob.
+          // This allows IndexedDB to serialize and save the actual audio binary data,
+          // bypassing Chrome's restrictive file handle security model on page reloads.
+          const persistentBlob = new Blob([file], { type: file.type || 'audio/mpeg' });
+
           const finalTrack: Track = {
             id: trackId,
             ...metadata,
             playCount: 0,
             addedAt: Date.now(),
             fileHandle,
-            rawFile: file,
+            rawFile: persistentBlob,
           };
 
           await musicDb.saveTrack(finalTrack);
@@ -922,7 +931,17 @@ export default function App() {
     setCurrentTrack(resolvedTrack);
 
     audioEngine.playTrack(resolvedTrack).catch((err) => {
-      alert(err.message || 'Error occurred starting audio execution.');
+      if (err.message && (err.message.includes('Missing file handle') || err.message.includes('could not be read'))) {
+        alert(
+          "🔒 Browser Sandbox Notice:\n\n" +
+          "Files scanned from local folders cannot be accessed on page reloads inside sandboxed previews (like this iframe).\n\n" +
+          "How to play your music:\n" +
+          "1. Click the 'Import Audio Files' button at the top to import/drag-and-drop your audio files directly. Under iframe mode, this stores them permanently and securely in the browser database.\n" +
+          "2. Or, open this app in a New Tab (click the 'Open in New Tab' icon in the top right of the screen) to use the folder scanner with persistent folder permissions!"
+        );
+      } else {
+        alert(err.message || 'Error occurred starting audio execution.');
+      }
     });
   };
 
